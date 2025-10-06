@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五目並べ</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        #board {
+            display: inline-grid;
+            grid-template-columns: repeat(15, 30px);
+            grid-template-rows: repeat(15, 30px);
+            gap: 0;
+            background: #daa520;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .cell {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #8b6914;
+            background: #daa520;
+            cursor: pointer;
+            position: relative;
+            transition: background 0.2s;
+        }
+        .cell:hover:not(.occupied) {
+            background: #c9961f;
+        }
+        .cell.black::after,
+        .cell.white::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .cell.black::after {
+            background: radial-gradient(circle at 30% 30%, #444, #000);
+        }
+        .cell.white::after {
+            background: radial-gradient(circle at 30% 30%, #fff, #ddd);
+        }
+        .cell.winning {
+            background: #ffeb3b !important;
+        }
+        #status {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            min-height: 30px;
+        }
+        #resetBtn {
+            display: none;
+            margin: 0 auto;
+            padding: 12px 30px;
+            font-size: 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #resetBtn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        #resetBtn.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 五目並べ 🎮</h1>
+        <div id="status">あなたの番です（黒）</div>
+        <div id="board"></div>
+        <button id="resetBtn">リセット</button>
+    </div>
+
+    <script>
+        const SIZE = 15;
+        let board = [];
+        let gameOver = false;
+        let currentPlayer = 'black';
+
+        const boardEl = document.getElementById('board');
+        const statusEl = document.getElementById('status');
+        const resetBtn = document.getElementById('resetBtn');
+
+        function init() {
+            board = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
+            gameOver = false;
+            currentPlayer = 'black';
+            boardEl.innerHTML = '';
+            statusEl.textContent = 'あなたの番です（黒）';
+            resetBtn.classList.remove('show');
+
+            for (let i = 0; i < SIZE; i++) {
+                for (let j = 0; j < SIZE; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener('click', handleClick);
+                    boardEl.appendChild(cell);
+                }
+            }
+        }
+
+        function handleClick(e) {
+            if (gameOver || currentPlayer !== 'black') return;
+
+            const row = parseInt(e.target.dataset.row);
+            const col = parseInt(e.target.dataset.col);
+
+            if (board[row][col]) return;
+
+            makeMove(row, col, 'black');
+
+            if (!gameOver) {
+                currentPlayer = 'white';
+                statusEl.textContent = 'コンピュータが考え中...';
+                setTimeout(computerMove, 300);
+            }
+        }
+
+        function makeMove(row, col, player) {
+            board[row][col] = player;
+            const cell = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+            cell.classList.add(player, 'occupied');
+
+            if (checkWin(row, col, player)) {
+                gameOver = true;
+                const winner = player === 'black' ? 'あなた' : 'コンピュータ';
+                statusEl.textContent = `${winner}の勝ちです！`;
+                resetBtn.classList.add('show');
+            } else if (isBoardFull()) {
+                gameOver = true;
+                statusEl.textContent = '引き分けです！';
+                resetBtn.classList.add('show');
+            }
+        }
+
+        function computerMove() {
+            if (gameOver) return;
+
+            const move = findBestMove();
+            if (move) {
+                makeMove(move.row, move.col, 'white');
+                if (!gameOver) {
+                    currentPlayer = 'black';
+                    statusEl.textContent = 'あなたの番です（黒）';
+                }
+            }
+        }
+
+        function findBestMove() {
+            let bestScore = -Infinity;
+            let bestMove = null;
+
+            const candidates = getCandidateMoves();
+
+            for (const {row, col} of candidates) {
+                const score = evaluateMove(row, col, 'white');
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = {row, col};
+                }
+            }
+
+            return bestMove;
+        }
+
+        function getCandidateMoves() {
+            const moves = [];
+            const checked = new Set();
+
+            for (let i = 0; i < SIZE; i++) {
+                for (let j = 0; j < SIZE; j++) {
+                    if (board[i][j]) {
+                        for (let di = -2; di <= 2; di++) {
+                            for (let dj = -2; dj <= 2; dj++) {
+                                const ni = i + di;
+                                const nj = j + dj;
+                                const key = `${ni},${nj}`;
+                                if (ni >= 0 && ni < SIZE && nj >= 0 && nj < SIZE && 
+                                    !board[ni][nj] && !checked.has(key)) {
+                                    moves.push({row: ni, col: nj});
+                                    checked.add(key);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (moves.length === 0) {
+                moves.push({row: Math.floor(SIZE/2), col: Math.floor(SIZE/2)});
+            }
+
+            return moves;
+        }
+
+        function evaluateMove(row, col, player) {
+            let score = 0;
+            const opponent = player === 'white' ? 'black' : 'white';
+
+            board[row][col] = player;
+            score += evaluatePosition(row, col, player) * 1.1;
+            board[row][col] = null;
+
+            board[row][col] = opponent;
+            score += evaluatePosition(row, col, opponent);
+            board[row][col] = null;
+
+            const centerDist = Math.abs(row - SIZE/2) + Math.abs(col - SIZE/2);
+            score += (SIZE - centerDist) * 0.1;
+
+            return score;
+        }
+
+        function evaluatePosition(row, col, player) {
+            const directions = [[0,1], [1,0], [1,1], [1,-1]];
+            let totalScore = 0;
+
+            for (const [dr, dc] of directions) {
+                const pattern = getPattern(row, col, dr, dc, player);
+                totalScore += scorePattern(pattern);
+            }
+
+            return totalScore;
+        }
+
+        function getPattern(row, col, dr, dc, player) {
+            let count = 1;
+            let openEnds = 0;
+            let spaces = 0;
+
+            for (let i = 1; i < 5; i++) {
+                const r = row + dr * i;
+                const c = col + dc * i;
+                if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) break;
+                if (board[r][c] === player) {
+                    count++;
+                } else if (board[r][c] === null) {
+                    spaces++;
+                    if (spaces === 1 && i < 4) continue;
+                    else {
+                        openEnds++;
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            spaces = 0;
+            for (let i = 1; i < 5; i++) {
+                const r = row - dr * i;
+                const c = col - dc * i;
+                if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) break;
+                if (board[r][c] === player) {
+                    count++;
+                } else if (board[r][c] === null) {
+                    spaces++;
+                    if (spaces === 1 && i < 4) continue;
+                    else {
+                        openEnds++;
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            return {count, openEnds};
+        }
+
+        function scorePattern({count, openEnds}) {
+            if (count >= 5) return 1000000;
+            if (count === 4) {
+                if (openEnds === 2) return 50000;
+                if (openEnds === 1) return 5000;
+            }
+            if (count === 3) {
+                if (openEnds === 2) return 8000;
+                if (openEnds === 1) return 500;
+            }
+            if (count === 2) {
+                if (openEnds === 2) return 300;
+                if (openEnds === 1) return 50;
+            }
+            if (count === 1) {
+                if (openEnds === 2) return 10;
+            }
+            return 0;
+        }
+
+        function checkWin(row, col, player) {
+            const directions = [
+                [0, 1],
+                [1, 0],
+                [1, 1],
+                [1, -1]
+            ];
+
+            for (const [dr, dc] of directions) {
+                let count = 1;
+                const winning = [[row, col]];
+
+                for (let i = 1; i < 5; i++) {
+                    const r = row + dr * i;
+                    const c = col + dc * i;
+                    if (r < 0 || r >= SIZE || c < 0 || c >= SIZE || board[r][c] !== player) break;
+                    count++;
+                    winning.push([r, c]);
+                }
+
+                for (let i = 1; i < 5; i++) {
+                    const r = row - dr * i;
+                    const c = col - dc * i;
+                    if (r < 0 || r >= SIZE || c < 0 || c >= SIZE || board[r][c] !== player) break;
+                    count++;
+                    winning.push([r, c]);
+                }
+
+                if (count >= 5) {
+                    winning.forEach(([r, c]) => {
+                        const cell = document.querySelector(`[data-row="${r}"][data-col="${c}"]`);
+                        cell.classList.add('winning');
+                    });
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        function isBoardFull() {
+            return board.every(row => row.every(cell => cell !== null));
+        }
+
+        resetBtn.addEventListener('click', init);
+
+        init();
+    </script>
+</body>
+</html>
